@@ -48,7 +48,7 @@ ESP8266 TCP 直连 OSS HTTP 80 端口上传 WAV
 
 ## 3. 顶层目录结构说明
 
-压缩包中存在一层中文目录，解压后在 Linux 下显示为 `#U8054#U7f51#U6d4b#U8bd5win/...`，语义应为“联网测试win”。真正工程根目录在第二层。
+压缩包中存在一层中文目录.
 
 ```text
 工程根目录
@@ -250,8 +250,6 @@ SPI1 引脚：
 ---
 
 ## 6. 对外接口与协议清单
-
-这里的“对外接口”主要是设备对云端/模块的协议，不是 HTTP REST API。
 
 ### 6.1 OneNET MQTT 连接参数
 
@@ -670,48 +668,7 @@ Options for Target → Output → 勾选 Create HEX File
 
 ## 11. 当前项目的主要问题与风险
 
-### 11.1 云端参数全部硬编码
-
-WiFi、OneNET 产品 ID、设备名、鉴权 token、MQTT topic、OSS Bucket 全部写死在 `.h/.c` 文件中。后续接手建议集中到一个 `config.h`，至少把以下内容统一管理：
-
-- WiFi SSID/PWD
-- OneNET Product ID
-- Device Name
-- MQTT Token/Sign
-- OSS Host
-- OSS Object Prefix
-- 音频参数
-
-### 11.2 OSS 上传没有鉴权
-
-`Wav_UploadToOss()` 手写 HTTP PUT，未添加 OSS 签名头。除非 Bucket 放开匿名写入，否则真实环境会失败。即使能成功，匿名写入也有严重安全风险。
-
-更合理的架构是：
-
-```text
-设备 → 后端请求临时上传凭证/预签名 URL → 设备 PUT 上传 → 后端/OneNET 记录 audio_url
-```
-
-或者：
-
-```text
-设备 → OneNET/后端上报事件 → 后端生成 OSS 上传策略 → 设备上传
-```
-
-### 11.3 MQTT AT 指令 JSON 转义复杂，维护成本高
-
-大量 `AT+MQTTPUB` 把 JSON 写在宏字符串里，包含 `\"`、`\,`、Unicode 编码，极易出错。
-
-建议封装一个函数：
-
-```c
-MQTT_PostProperty_String(const char *name, const char *value);
-MQTT_PostProperty_Number(const char *name, int value);
-```
-
-由函数统一拼 JSON 和 topic。
-
-### 11.4 录音期间会屏蔽新报警
+### 11.1 录音期间会屏蔽新报警
 
 代码中多处判断 `App_IsRecording()`，录音时不处理新的语音报警和按键报警。这能避免文件/网络状态冲突，但也意味着 15 秒内会丢弃后续事件。
 
@@ -728,7 +685,7 @@ MQTT_PostProperty_Number(const char *name, int value);
 
 当前代码用 `g_ESP8266RawBusy` 降低 OSS 上传时的解析干扰，但整体仍是共享状态机，复杂场景下容易串包。
 
-### 11.6 TF 卡写文件与网络上传在主循环中同步执行
+### 11.2TF 卡写文件与网络上传在主循环中同步执行
 
 录音结束后上传 OSS 是同步阻塞式流程。上传期间：
 
@@ -737,115 +694,17 @@ MQTT_PostProperty_Number(const char *name, int value);
 - ESP8266 状态异常时可能卡顿；
 - 大文件上传稳定性取决于 WiFi 和 AT 响应。
 
-### 11.7 按键读取是阻塞式
+### 11.3按键读取是阻塞式
 
 `Key_GetNum()` 按下后会等待松手。一般教学项目可用，正式项目建议改为中断或非阻塞消抖。
 
-### 11.8 语音命令缓冲只有 20 字节
+### 11.4音命令缓冲只有 20 字节
 
 当前只接收数字命令足够，但如果后续语音模块直接发中文/长文本，需要扩大缓冲并做超长保护。
 
-### 11.9 构建日志中有 2 个转义警告
+## 12. 快速调试建议
 
-`Hardware/esp8266.c` 第 191、218 行附近出现 `#192-D: unrecognized character escape sequence`。原因大概率是 AT+MQTTPUB 的 JSON 字符串中转义写法不规范。虽然当前能编译，但建议整理字符串拼接方式。
-
-### 11.10 `oss_c_sdk` 目录可能误导接手者
-
-项目包含 `oss_c_sdk/`，但 Keil 工程文件没有把它纳入核心编译列表，实际 OSS 上传不是用 SDK 完成的。接手时不要误以为已经接入阿里云 OSS SDK。
-
----
-
-## 12. 建议的后续重构方向
-
-### 12.1 第一阶段：不改变功能，先整理可维护性
-
-1. 新增 `AppConfig.h`：统一 WiFi、OneNET、OSS、音频参数。
-2. 新增 `Cloud_OneNET.c/.h`：封装属性上报。
-3. 新增 `Cloud_OSS.c/.h`：从 `main.c` 拆出 OSS 上传。
-4. 新增 `AudioRecorder.c/.h`：从 `main.c` 拆出 WAV/ADC/DMA。
-5. 新增 `AlarmService.c/.h`：整理报警类型映射。
-6. 删除或标注未使用模块，避免评审/接手者误判。
-
-建议目标结构：
-
-```text
-User/
-├── main.c
-├── app_config.h
-├── app_types.h
-Services/
-├── alarm_service.c/.h
-├── audio_recorder.c/.h
-├── cloud_onenet.c/.h
-├── cloud_oss.c/.h
-Drivers/
-├── esp8266_at.c/.h
-├── voice_serial.c/.h
-├── sd_card.c/.h
-├── led.c/.h
-└── key.c/.h
-```
-
-### 12.2 第二阶段：增强稳定性
-
-- 建立明确状态机：`IDLE / ALARM_POSTING / RECORDING / UPLOADING / ERROR_RETRY`。
-- 把 ESP8266 AT 接收改成环形缓冲区。
-- 给每个 AT 指令加错误码与重试策略。
-- 上传失败时保留本地 WAV，后续重传。
-- MQTT 上报失败时记录待补偿事件。
-- 录音文件名增加设备 ID，避免多设备同名。
-
-### 12.3 第三阶段：安全化云端上传
-
-建议不要让设备直接匿名 PUT OSS。更安全方案：
-
-```text
-设备触发报警
-  ↓
-OneNET 上报事件
-  ↓
-后端收到事件或轮询 OneNET
-  ↓
-后端生成预签名 OSS 上传 URL
-  ↓
-设备使用临时 URL 上传音频
-  ↓
-后端记录完整报警事件
-```
-
-如果设备端资源有限，也可以让设备只上报事件，音频上传转为局域网/网关/后端代理处理。
-
----
-
-## 13. 接手时优先阅读顺序
-
-建议按这个顺序读代码：
-
-1. `User/main.c`
-   - 先看初始化和主循环。
-   - 再看 WAV/ADC/DMA 录音函数。
-   - 最后看 OSS 上传函数。
-
-2. `Alarm/alarm.c`
-   - 理解每种报警映射到哪些 OneNET 属性。
-
-3. `Hardware/esp8266.h`
-   - 看 WiFi、MQTT、NTP、topic、鉴权参数。
-
-4. `Hardware/esp8266.c`
-   - 看 AT 指令、MQTT 连接、NTP 解析、property/set 处理。
-
-5. `User/stm32f10x_it.c`
-   - 看 ESP8266 接收中断和 DMA 中断。
-
-6. `Hardware/sd_spi.c`、`diskio.c`、`Hardware/tf_card.c`
-   - 看 TF 卡和 FatFs 如何接起来。
-
----
-
-## 14. 快速调试建议
-
-### 14.1 串口调试
+### 12.1 串口调试
 
 - USART1：115200，作为 printf 输出口。
 - 建议使用 USB-TTL 接 PA9/PA10/GND。
@@ -858,7 +717,7 @@ Configuring TCP ESP8266 ......
 Configurating MQTT ESP8266 ......
 ```
 
-### 14.2 WiFi 调试
+### 12.2 WiFi 调试
 
 检查 ESP8266 是否能收到：
 
@@ -870,7 +729,7 @@ AT+CWJAP="HiwonderESP","hiwonder"
 
 如果卡在 WiFi 连接，先确认热点名称密码。
 
-### 14.3 OneNET 调试
+### 12.3 OneNET 调试
 
 重点看：
 
@@ -878,7 +737,7 @@ AT+CWJAP="HiwonderESP","hiwonder"
 - `AT+MQTTSUB` 是否返回 OK。
 - OneNET 物模型里是否能看到 `eventType/desc/alarm_level/time/audio_url`。
 
-### 14.4 录音调试
+### 12.4 录音调试
 
 重点看：
 
@@ -887,7 +746,7 @@ AT+CWJAP="HiwonderESP","hiwonder"
 - 是否打印 `WAV saved, bytes=240000`。
 - 文件是否能在电脑上作为 WAV 播放。
 
-### 14.5 OSS 调试
+### 12.5 OSS 调试
 
 重点看：
 
@@ -898,7 +757,7 @@ AT+CWJAP="HiwonderESP","hiwonder"
 
 ---
 
-## 15. 当前版本的功能边界
+## 13. 当前版本的功能边界
 
 已经实现/基本具备：
 
@@ -924,21 +783,3 @@ AT+CWJAP="HiwonderESP","hiwonder"
 - 网络异常重试和离线缓存机制较弱。
 - OLED、蜂鸣器、OSS SDK 等模块存在但当前主链路未充分使用。
 
----
-
-## 16. 给接手者的结论
-
-这个项目不是一个完整的“后端系统”，而是一个已经具备核心闭环的 STM32 物联网终端固件。它的主线非常清晰：**触发报警、上报 OneNET、录音、存 TF 卡、上传 OSS、回传音频 URL**。
-
-接手时不要先陷入所有文件，重点抓住四条线：
-
-1. **业务线**：`main.c` + `alarm.c`。
-2. **云通信线**：`esp8266.c/.h`。
-3. **音频线**：`ADC1 + DMA1 + TIM3 + WAV`，主要在 `main.c`。
-4. **存储线**：`tf_card.c + sd_spi.c + diskio.c + FatFs`。
-
-如果要把它升级成正式比赛/工程作品，优先做三件事：
-
-1. 把所有云端参数集中配置化。
-2. 把 OneNET 上报和 OSS 上传封装成独立服务层。
-3. 解决 OSS 鉴权、上传失败重试、事件 ID 关联这三个工程化问题。
