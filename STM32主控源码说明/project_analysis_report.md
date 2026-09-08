@@ -1,4 +1,3 @@
-test
 # STM32 联网报警录音项目接手清单
 
 > 依据压缩包内实际源码、Keil 工程文件与构建日志整理。该项目是 **STM32F103C8T6 + ESP8266 + OneNET + TF 卡 + OSS 音频上传** 的嵌入式固件项目，不是 SpringBoot/Web 后端项目。
