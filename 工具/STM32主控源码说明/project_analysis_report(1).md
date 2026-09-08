@@ -1,3 +1,4 @@
+test
 # STM32 联网报警录音项目接手清单
 
 > 依据压缩包内实际源码、Keil 工程文件与构建日志整理。该项目是 **STM32F103C8T6 + ESP8266 + OneNET + TF 卡 + OSS 音频上传** 的嵌入式固件项目，不是 SpringBoot/Web 后端项目。
@@ -68,7 +69,7 @@ ESP8266 TCP 直连 OSS HTTP 80 端口上传 WAV
 │   ├── esp8266.c/.h             # ESP8266 AT、WiFi、MQTT、NTP、TCP 上传
 │   ├── Serial.c/.h              # USART3 语音模块串口
 │   ├── usart.c/.h               # USART1 调试串口
-│   ├── LED.c/.h                 # PA0 LED
+│   ├── LED.c/.h                 # PA0 LED 
 │   ├── Key.c/.h                 # PB5/PB9 按键
 │   ├── tf_card.c/.h             # FatFs 挂载与文件追加封装
 │   ├── sd_spi.c/.h              # SPI1 驱动 SD/TF 卡底层读写
